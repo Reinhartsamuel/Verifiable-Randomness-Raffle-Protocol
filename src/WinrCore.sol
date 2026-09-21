@@ -16,14 +16,13 @@ import {FreeEntryVerifier2} from "./FreeEntryVerifier2.sol";
 
 /// @title  WinrCore
 /// @notice Gas-optimised raffle system backed by Quiver VRF (push/callback flow) + a
-///         self-operated resolver keeper, on Robinhood Chain. Replaces Chainlink VRF v2.5 +
-///         Chainlink Automation used by `RaffledCore` (which stays untouched on Base).
-///         Supports ERC-20 tokens *or* ERC-721 NFTs as the raffle prize. USDC-only ticket
-///         payments. Underfilled raffles return the prize to the host and raffle the
-///         collected payments to a random winner. Platform fee taken from payment pool
-///         (and prize for ERC-20 full-fills). Fee changes require a 2-day timelock.
+///         self-operated resolver keeper, on Robinhood Chain. Supports ERC-20 tokens *or*
+///         ERC-721 NFTs as the raffle prize. USDC-only ticket payments. Underfilled raffles
+///         return the prize to the host and raffle the collected payments to a random
+///         winner. Platform fee taken from payment pool (and prize for ERC-20 full-fills).
+///         Fee changes require a 2-day timelock.
 ///
-/// @dev    Security model vs. the draft `QuiverRaffle.sol` (deleted):
+/// @dev    Security model:
 ///         - Resolution is resolver-gated with a fresh, secret-until-landed salt
 ///           (`resolveRaffle`/`retryResolve`), not a publicly-derivable on-chain seed. This
 ///           reduces a malicious/colluding randomness provider to *stalling only* — it can
@@ -44,9 +43,8 @@ import {FreeEntryVerifier2} from "./FreeEntryVerifier2.sol";
 ///           once in `settle()` or a cancel path — never at request time, where a retried
 ///           request could otherwise double-transfer.
 ///
-///   Storage packing: `RaffleData` is kept byte-identical to `RaffledCore` (5 EVM slots,
-///   including the unused `ticketsSold`) so `getRaffle` ABI decoding is unaffected. All new
-///   state lives in separate mappings.
+///   Storage packing: `RaffleData` occupies 5 EVM slots so `getRaffle` ABI decoding is
+///   unaffected. All resolution state lives in separate mappings.
 contract WinrCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEntryVerifier2, Ownable2Step, Pausable {
     using SafeERC20 for IERC20;
 
@@ -54,8 +52,8 @@ contract WinrCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEntry
     // Types
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev RESOLVED appended at index 4 — indices 0-3 keep RaffledCore's meaning so any
-    ///      frontend/indexer decoding the old enum values does not break.
+    /// @dev RESOLVED appended at index 4 — indices 0-3 retain their original meaning so any
+    ///      frontend/indexer decoding existing enum values does not break.
     enum RaffleStatus {
         OPEN,
         PENDING_VRF,
@@ -98,7 +96,7 @@ contract WinrCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEntry
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // State — raffle core (byte-identical layout to RaffledCore)
+    // State — raffle core
     // ──────────────────────────────────────────────────────────────────────
 
     mapping(uint256 => RaffleData) public raffles;
@@ -697,8 +695,7 @@ contract WinrCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEntry
 
     /// @notice Cancel a raffle that expired without ever getting a successful randomness
     ///         request in flight. Permissionless, but gated by RESOLVE_GRACE so it cannot
-    ///         front-run the resolver keeper the instant a raffle expires (fixes the
-    ///         zero-grace griefing vector present in RaffledCore.cancelExpiredRaffle).
+    ///         front-run the resolver keeper the instant a raffle expires.
     function cancelExpiredRaffle(uint256 _raffleId) external nonReentrant {
         RaffleData storage raffle = raffles[_raffleId];
         if (raffle.status != RaffleStatus.OPEN) revert RaffleNotOpen(_raffleId);
@@ -727,7 +724,7 @@ contract WinrCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEntry
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Participant refunds (pull-based, O(1)) — unchanged from RaffledCore
+    // Participant refunds (pull-based, O(1))
     // ──────────────────────────────────────────────────────────────────────
 
     function claimRefund(uint256 _raffleId) external nonReentrant {
@@ -893,7 +890,7 @@ contract WinrCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEntry
         return (_amount * platformFeeBps) / 10_000;
     }
 
-    /// @dev O(log N) binary search for winner selection — identical math to RaffledCore.
+    /// @dev O(log N) binary search for winner selection.
     function _findWinner(uint256 _raffleId, uint256 _winningTicket) internal view returns (address) {
         TicketRange[] storage ranges = ticketRanges[_raffleId];
         uint256 low = 0;

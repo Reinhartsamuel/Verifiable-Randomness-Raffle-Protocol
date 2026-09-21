@@ -9,6 +9,12 @@
     "rev": "1801b0541f4fda118a10798fd3486bb7051c5dd6"
   },
   "lib/openzeppelin-contracts": {
-    "rev": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
+    "tag": {
+      "name": "v5.7.0",
+      "rev": "cab19933c33c2ad1d4c7a84864a3601dddfd16f3"
+    }
+  },
+  "lib/quiver-kit": {
+    "rev": "36866f2016b14556e41849a5f50fc816d0ab4b88"
   }
 }
