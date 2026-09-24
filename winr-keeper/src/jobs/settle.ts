@@ -2,10 +2,11 @@ import type { PublicClient } from 'viem';
 import { randomnessFulfilledEvent } from '../abi.ts';
 import type { Alerter } from '../alerts.ts';
 import type { KeeperConfig } from '../config.ts';
-import { getRaffleCount, getRaffleView, summarizeSettlementReceipt } from '../contract.ts';
+import { getRaffleCount, getRaffleStatus, getRaffleView, summarizeSettlementReceipt } from '../contract.ts';
 import type { Logger } from '../logger.ts';
 import { scanLogsAdaptive } from '../logs.ts';
 import type { StateStore } from '../state.ts';
+import { sweepForResolvedRaffles, type SweepResult } from '../sweep.ts';
 import type { TxSender } from '../tx.ts';
 import { RaffleStatus, raffleStatusName } from '../types.ts';
 
@@ -40,14 +41,20 @@ export interface SettleJobDeps {
  * Cron #2 — settlement relayer.
  *
  * There is no on-chain view for "RESOLVED and un-settled", so the queue is
- * derived from `RandomnessFulfilled` logs:
- *   1. scan new blocks (chunked eth_getLogs) from the persisted cursor and
- *      enqueue every fulfilled raffleId; on first run, look back N blocks to
- *      catch fulfilled-but-unsettled raffles from before the keeper started;
- *   2. for each due queue item, read getRaffle(): only RESOLVED goes to
- *      `settle()` (reorg / already-settled are dropped);
- *   3. escrowed payouts (PayoutEscrowed / NftEscrowed) are logged and the
- *      raffle is marked settled — never retried.
+ * derived from two independent discovery paths:
+ *   1. on-chain status sweep (authoritative, getLogs-independent): walk raffle
+ *      ids forward from a persisted cursor, reading `getRaffle` status, and
+ *      enqueue RESOLVED ones; re-check previously-seen non-terminal raffles via
+ *      a rotating watchlist so a raffle that was OPEN when first seen is caught
+ *      when it later resolves. This is what keeps settlement working when the
+ *      RPC's `eth_getLogs` is unusable (archive/403/429).
+ *   2. fulfilled-log scan (fast path): chunked `eth_getLogs` from the persisted
+ *      cursor for `RandomnessFulfilled`; on first run, look back N blocks. It is
+ *      cheap when the log RPC supports the range and harmless when it does not.
+ * Both feed the same dedup'd queue. Then, for each due item, read getRaffle():
+ * only RESOLVED goes to `settle()` (reorg / already-settled are dropped).
+ * Escrowed payouts (PayoutEscrowed / NftEscrowed) are logged and the raffle is
+ * marked settled — never retried.
  */
 export class SettleJob {
   readonly #cfg: KeeperConfig;
@@ -70,6 +77,23 @@ export class SettleJob {
 
   async run(): Promise<void> {
     const startedAt = Date.now();
+
+    // Path 1 (authoritative, getLogs-independent): sweep on-chain status. This
+    // is what guarantees a RESOLVED raffle is never missed when the RPC's
+    // eth_getLogs is unavailable (archive/403/429) and the log scan below
+    // cannot advance.
+    let swept: SweepResult = { scanned: 0, resolved: 0, watching: 0, moreToScan: false };
+    try {
+      swept = await this.#sweepOnChain();
+    } catch (error) {
+      this.#logger.error('on-chain settlement sweep failed — will retry next cycle', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Path 2 (fast path): the fulfilled-log scan. Kept because it is cheap when
+    // the log RPC supports the range; failures are tolerated — the sweep above
+    // still discovers everything.
     let scanned: ScanReport = { logsSeen: 0, enqueued: 0, requests: 0, budgetExhausted: false };
     try {
       scanned = await this.#scanFulfilledLogs();
@@ -78,16 +102,43 @@ export class SettleJob {
       // the queue from draining. The cursor is checkpointed per chunk, so the
       // next cycle resumes where this one stopped instead of replaying the
       // whole window.
-      this.#logger.error('fulfilled-log scan failed — processing existing queue only', {
+      this.#logger.error('fulfilled-log scan failed — relying on the on-chain sweep', {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
     const settled = await this.#processQueue();
     this.#logger.info('settle cycle complete', {
+      ...swept,
       ...scanned,
       ...settled,
       queue: this.#state.queueSize(),
       durationMs: Date.now() - startedAt,
+    });
+  }
+
+  // ── Step 0: on-chain status sweep (getLogs-independent) ───────────────────
+
+  async #sweepOnChain(): Promise<SweepResult> {
+    if (!this.#cfg.settleSweepEnabled) {
+      return { scanned: 0, resolved: 0, watching: 0, moreToScan: false };
+    }
+    const raffleCount = await getRaffleCount(this.#publicClient, this.#cfg.contractAddress);
+    return sweepForResolvedRaffles({
+      raffleCount,
+      batchSize: this.#cfg.settleSweepBatch,
+      watchBatchSize: this.#cfg.settleSweepBatch,
+      recentLookback: this.#cfg.settleSweepBatch,
+      state: this.#state,
+      readStatus: (raffleId) => getRaffleStatus(this.#publicClient, this.#cfg.contractAddress, raffleId),
+      onResolved: (raffleId) => {
+        if (this.#state.enqueue(raffleId)) {
+          this.#logger.info('on-chain sweep enqueued RESOLVED raffle for settlement', {
+            raffleId: raffleId.toString(),
+          });
+        }
+      },
+      logger: this.#logger,
     });
   }
 

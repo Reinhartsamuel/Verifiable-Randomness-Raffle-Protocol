@@ -8,6 +8,7 @@ const MAX_SETTLED_CACHE = 2_000;
 const MAX_SALTS_PER_RAFFLE = 64;
 const MAX_ABANDONED = 1_000;
 const MAX_RESOLVE_COOLDOWNS = 1_000;
+const MAX_WATCHED_RAFFLES = 5_000;
 const FLUSH_DEBOUNCE_MS = 250;
 
 export interface QueueItem {
@@ -35,6 +36,10 @@ interface PersistedState {
   scanBackoffUntil: number;
   /** Current scan backoff window in ms (doubles while the scan stays behind). */
   scanBackoffMs: number;
+  /** Highest raffle id read by the on-chain settlement sweep (0 = none yet). */
+  sweepCursor: string;
+  /** Raffle ids seen non-terminal (OPEN/PENDING_VRF) that may still become RESOLVED. */
+  watchlist: string[];
   queue: QueueItem[];
   settled: string[];
   abandoned: AbandonedItem[];
@@ -51,6 +56,8 @@ function emptyState(): PersistedState {
     logChunkRpcUrl: null,
     scanBackoffUntil: 0,
     scanBackoffMs: 0,
+    sweepCursor: '0',
+    watchlist: [],
     queue: [],
     settled: [],
     abandoned: [],
@@ -64,8 +71,8 @@ function emptyState(): PersistedState {
  * and a pid lock so two keeper processes cannot share one state file (which
  * would double-spend salts and double-send settles).
  *
- * Holds the settlement queue fed by RandomnessFulfilled, the log scan cursor,
- * the settled ring and the per-raffle salt registry.
+ * Holds the settlement queue, the on-chain sweep cursor + watchlist, the log
+ * scan cursor, the settled ring and the per-raffle salt registry.
  */
 export class StateStore implements SaltStorage {
   readonly #file: string;
@@ -101,6 +108,8 @@ export class StateStore implements SaltStorage {
           logChunkRpcUrl: typeof parsed.logChunkRpcUrl === 'string' ? parsed.logChunkRpcUrl : null,
           scanBackoffUntil: typeof parsed.scanBackoffUntil === 'number' ? parsed.scanBackoffUntil : 0,
           scanBackoffMs: typeof parsed.scanBackoffMs === 'number' ? parsed.scanBackoffMs : 0,
+          sweepCursor: typeof parsed.sweepCursor === 'string' ? parsed.sweepCursor : '0',
+          watchlist: Array.isArray(parsed.watchlist) ? parsed.watchlist.filter((id): id is string => typeof id === 'string') : [],
           queue: Array.isArray(parsed.queue) ? parsed.queue : [],
           settled: Array.isArray(parsed.settled) ? parsed.settled : [],
           abandoned: Array.isArray(parsed.abandoned) ? parsed.abandoned : [],
@@ -257,6 +266,61 @@ export class StateStore implements SaltStorage {
     this.#scheduleFlush();
   }
 
+  // ── On-chain settlement sweep ─────────────────────────────────────────────
+
+  /** Highest raffle id the forward sweep has read (0 before the first pass). */
+  get sweepCursor(): bigint {
+    return BigInt(this.#data.sweepCursor);
+  }
+
+  setSweepCursor(raffleId: bigint): void {
+    if (this.#data.sweepCursor === raffleId.toString()) return;
+    this.#data.sweepCursor = raffleId.toString();
+    this.#scheduleFlush();
+  }
+
+  /**
+   * Up to `limit` watched raffle ids (all of them when `limit` is omitted),
+   * oldest first. The watchlist holds ids last seen OPEN/PENDING_VRF — they are
+   * re-checked by the sweep because they can still transition to RESOLVED.
+   */
+  watchedRaffleIds(limit?: number): bigint[] {
+    const ids = limit === undefined ? this.#data.watchlist : this.#data.watchlist.slice(0, Math.max(0, limit));
+    return ids.map((id) => BigInt(id));
+  }
+
+  watchRaffle(raffleId: bigint): void {
+    const key = raffleId.toString();
+    if (this.#data.watchlist.includes(key)) return;
+    this.#data.watchlist.push(key);
+    if (this.#data.watchlist.length > MAX_WATCHED_RAFFLES) {
+      const dropped = this.#data.watchlist.splice(0, this.#data.watchlist.length - MAX_WATCHED_RAFFLES);
+      this.#logger.warn('settlement watchlist full — dropping oldest watched raffles', {
+        max: MAX_WATCHED_RAFFLES,
+        dropped: dropped.length,
+      });
+    }
+    this.#scheduleFlush();
+  }
+
+  unwatchRaffle(raffleId: bigint): void {
+    const key = raffleId.toString();
+    const index = this.#data.watchlist.indexOf(key);
+    if (index === -1) return;
+    this.#data.watchlist.splice(index, 1);
+    this.#scheduleFlush();
+  }
+
+  /** Rotate a still-non-terminal watched id to the back of the watchlist. */
+  touchWatchedRaffle(raffleId: bigint): void {
+    const key = raffleId.toString();
+    const index = this.#data.watchlist.indexOf(key);
+    if (index === -1 || index === this.#data.watchlist.length - 1) return;
+    this.#data.watchlist.splice(index, 1);
+    this.#data.watchlist.push(key);
+    this.#scheduleFlush();
+  }
+
   // ── Resolve retry cooldown ────────────────────────────────────────────────
 
   resolveCooldownUntil(raffleId: bigint): number {
@@ -308,6 +372,7 @@ export class StateStore implements SaltStorage {
       queue: this.#data.queue.length,
       settledCache: this.#data.settled.length,
       abandoned: this.#data.abandoned.length,
+      watching: this.#data.watchlist.length,
       trackedRafflesWithSalts: Object.keys(this.#data.salts).length,
     };
   }

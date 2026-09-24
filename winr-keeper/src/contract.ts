@@ -116,6 +116,25 @@ export async function getRaffleView(
   return { ...raffle, expiry: toBigint(raffle.expiry), ticketsSold: toBigint(raffle.ticketsSold) };
 }
 
+/**
+ * Status-only read used by the on-chain settlement sweep. It decodes the same
+ * `getRaffle` struct as {getRaffleView} but returns just the status byte, which
+ * is all the sweep needs to decide enqueue / watch / skip.
+ */
+export async function getRaffleStatus(
+  publicClient: PublicClient,
+  contractAddress: Address,
+  raffleId: bigint,
+): Promise<number> {
+  const raffle = (await publicClient.readContract({
+    address: contractAddress,
+    abi: winrCoreAbi,
+    functionName: 'getRaffle',
+    args: [raffleId],
+  })) as unknown as RaffleView;
+  return Number(raffle.status);
+}
+
 export async function getResolutionStateView(
   publicClient: PublicClient,
   contractAddress: Address,

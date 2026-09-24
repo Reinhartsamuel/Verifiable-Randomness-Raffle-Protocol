@@ -35,6 +35,10 @@ export interface KeeperConfig {
   readonly maxScanPasses: number;
   readonly cancelExpiredAfterGrace: boolean;
   readonly settleMaxAttempts: number;
+  /** Discover RESOLVED raffles by sweeping on-chain status (getLogs-independent). */
+  readonly settleSweepEnabled: boolean;
+  /** Max raffle ids read per sweep pass (forward + watch). */
+  readonly settleSweepBatch: number;
   readonly logLookbackBlocks: bigint;
   readonly logChunkSize: bigint;
   readonly logChunkSizeExplicit: boolean;
@@ -250,6 +254,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly 
     maxScanPasses: int('RAFFLE_MAX_SCAN_PASSES', 200, 1, 1_000_000),
     cancelExpiredAfterGrace: bool('RAFFLE_CANCEL_EXPIRED_AFTER_GRACE', false),
     settleMaxAttempts: int('RAFFLE_SETTLE_MAX_ATTEMPTS', 5, 1, 100),
+    settleSweepEnabled: bool('RAFFLE_SETTLE_SWEEP_ENABLED', true),
+    settleSweepBatch: int('RAFFLE_SETTLE_SWEEP_BATCH', 200, 1, 10_000),
     logLookbackBlocks: bigint('RAFFLE_LOG_LOOKBACK_BLOCKS', 10_000n, 0n),
     logChunkSize: bigint('RAFFLE_LOG_CHUNK_SIZE', 5_000n, 1n),
     logChunkSizeExplicit: raw('RAFFLE_LOG_CHUNK_SIZE') !== undefined,

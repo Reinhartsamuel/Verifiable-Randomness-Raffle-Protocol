@@ -23,6 +23,8 @@ test('applies documented defaults', () => {
   assert.equal(cfg.settleIntervalMs, 180_000);
   assert.equal(cfg.cancelExpiredAfterGrace, false);
   assert.equal(cfg.settleMaxAttempts, 5);
+  assert.equal(cfg.settleSweepEnabled, true);
+  assert.equal(cfg.settleSweepBatch, 200);
   assert.equal(cfg.dryRun, false);
   assert.equal(cfg.jobs.resolve, true);
   assert.equal(cfg.jobs.settle, true);
@@ -46,6 +48,12 @@ test('a separate log-scan RPC can be configured', () => {
   const cfg = loadConfig(baseEnv({ RAFFLE_LOG_RPC_URL: 'https://rpc.testnet.chain.robinhood.com' }), []);
   assert.equal(cfg.logRpcUrl, 'https://rpc.testnet.chain.robinhood.com');
   assert.equal(cfg.rpcUrl, 'https://rpc.testnet.chain.robinhood.com');
+});
+
+test('the on-chain settlement sweep can be tuned or disabled', () => {
+  const cfg = loadConfig(baseEnv({ RAFFLE_SETTLE_SWEEP_ENABLED: 'false', RAFFLE_SETTLE_SWEEP_BATCH: '25' }), []);
+  assert.equal(cfg.settleSweepEnabled, false);
+  assert.equal(cfg.settleSweepBatch, 25);
 });
 
 test('rejects a malformed log-scan RPC URL', () => {

@@ -47,3 +47,37 @@ test('learned log chunk size is scoped to the RPC it was learned from', async ()
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// The on-chain settlement sweep must survive restarts, otherwise a keeper
+// redeploy would rescan every raffle from id 1 (or, worse, skip the ids it had
+// already walked past).
+test('on-chain sweep cursor and watchlist persist across restarts', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'winr-keeper-state-'));
+  const file = join(dir, 'keeper-state.json');
+
+  const first = await StateStore.open(file, silentLogger());
+  try {
+    assert.equal(first.sweepCursor, 0n);
+    first.setSweepCursor(7n);
+    first.watchRaffle(3n);
+    first.watchRaffle(5n);
+    first.watchRaffle(3n); // dedup
+    first.touchWatchedRaffle(3n); // rotate to back
+    await first.flush();
+    assert.deepEqual(first.watchedRaffleIds(), [5n, 3n]);
+  } finally {
+    await first.close();
+  }
+
+  const reopened = await StateStore.open(file, silentLogger());
+  try {
+    assert.equal(reopened.sweepCursor, 7n);
+    assert.deepEqual(reopened.watchedRaffleIds(), [5n, 3n]);
+    reopened.unwatchRaffle(5n);
+    assert.deepEqual(reopened.watchedRaffleIds(), [3n]);
+    assert.equal(reopened.stats().watching, 1);
+  } finally {
+    await reopened.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -119,6 +119,8 @@ All config is env-driven; see `.env.example` for the full annotated list.
 | `RAFFLE_LOG_CHUNK_SIZE` | no | `5000` | `eth_getLogs` chunking. Auto-shrinks to the provider's cap and is remembered per RPC URL (changing `RAFFLE_LOG_RPC_URL` re-probes); set explicitly to reset the learned size. |
 | `RAFFLE_LOG_MAX_REQUESTS_PER_CYCLE` | no | `50` | Cap on `eth_getLogs` calls per settle cycle; the cursor resumes next cycle. When exhausted, the scan backs off (60 s doubling to 15 min). |
 | `RAFFLE_SETTLE_MAX_ATTEMPTS` | no | `5` | Drop + alert after this many failed settles. |
+| `RAFFLE_SETTLE_SWEEP_ENABLED` | no | `true` | On-chain, `eth_getLogs`-independent discovery of `RESOLVED` raffles (walk `raffleCount` + status + rotating watchlist). |
+| `RAFFLE_SETTLE_SWEEP_BATCH` | no | `200` | Max raffle ids read per sweep pass (forward pass + watchlist slice). |
 | `RAFFLE_FEE_FUND_THRESHOLD` | no | disabled | Auto top-up the contract balance below this (wei). |
 | `RAFFLE_FEE_FUND_TARGET` | no | `fee × batch` | Top-up target (wei). |
 | `RAFFLE_MIN_WALLET_BALANCE` | no | `0` | Pause + alert below this keeper balance (wei). |
@@ -157,9 +159,27 @@ All config is env-driven; see `.env.example` for the full annotated list.
 
 ### Cron #2 — settlement (`src/jobs/settle.ts`)
 
-There is no on-chain view for “RESOLVED and un-settled”, so the queue is derived:
+There is no on-chain view for “RESOLVED and un-settled”, so the queue is derived
+from **two independent discovery paths** that both feed the same dedup'd queue.
+Either path alone is enough; running both means a broken log RPC can no longer
+strand a fulfilled raffle.
 
-1. **Scan** — `eth_getLogs` for `RandomnessFulfilled` from the persisted cursor
+1. **On-chain status sweep (authoritative, `getLogs`-independent)** —
+   `src/sweep.ts` walks raffle ids forward from a persisted cursor
+   (`RAFFLE_SETTLE_SWEEP_BATCH` ids per cycle), reads `getRaffle(id).status`, and
+   enqueues every `RESOLVED` id. `OPEN` / `PENDING_VRF` ids are remembered in a
+   rotating watchlist and re-checked on later cycles (a raffle is usually still
+   `OPEN` when its id is first swept and only becomes `RESOLVED` later);
+   `COMPLETED` / `CANCELLED` ids are dropped. The cursor only advances past ids
+   whose status was actually read, so a transient RPC failure resumes at the same
+   id instead of skipping a raffle. Disable with `RAFFLE_SETTLE_SWEEP_ENABLED=false`.
+   This is what keeps settlement alive when the log RPC rejects historical
+   `eth_getLogs` (archive-only / Cloudflare 403) or the metered provider is
+   rate-limited — the exact failure that left raffle #1 `RESOLVED` and unsettled
+   on mainnet.
+
+2. **Fulfilled-log scan (fast path)** — `eth_getLogs` for `RandomnessFulfilled`
+   from the persisted cursor
    (`RAFFLE_START_BLOCK` or a `RAFFLE_LOG_LOOKBACK_BLOCKS` lookback on first run),
    chunked by `RAFFLE_LOG_CHUNK_SIZE`. Managed RPCs cap the block span of one
    `eth_getLogs` call (Alchemy's free tier allows only 10 blocks), so the scanner
@@ -174,7 +194,9 @@ There is no on-chain view for “RESOLVED and un-settled”, so the queue is der
    resumes where it stopped rather than replaying the window. When the budget is
    exhausted the scan backs off (60 s, doubling to 15 min) instead of re-burning
    the budget every cycle. On a contract that has no raffles yet, the first run
-   skips the lookback and starts at head.
+   skips the lookback and starts at head. A scan that fails outright (archive /
+   403 / 429) is logged and ignored — the on-chain sweep above still discovers
+   everything.
 
    > **Compute-unit note.** A narrow `eth_getLogs` cap is expensive on a fast
    > chain: 10-block chunks cost ~7.5 CU per block scanned, so a chain producing
@@ -182,22 +204,24 @@ There is no on-chain view for “RESOLVED and un-settled”, so the queue is der
    > `RAFFLE_LOG_RPC_URL` to a wide-range endpoint (the chain's public RPC
    > handles 100 k-block ranges) so the scan does not drain a metered provider.
    > Stretching `RAFFLE_SETTLE_INTERVAL_MS` does **not** reduce this cost — the
-   > same blocks still have to be scanned.
-2. **Settle** — for each due queue item, `getRaffle(id)` is the source of truth:
+   > same blocks still have to be scanned. If no such endpoint is available, the
+   > on-chain sweep makes the log scan optional.
+3. **Settle** — for each due queue item, `getRaffle(id)` is the source of truth:
    - `RESOLVED` → `settle(id)` (permissionless; any relayer could do it)
    - `PENDING_VRF` → the log was reorged away; drop (the resolve sweep handles the stall)
    - `COMPLETED` / `CANCELLED` → already settled elsewhere; drop
-3. **Escrow** — if the settle receipt contains `PayoutEscrowed` / `NftEscrowed`, the
+4. **Escrow** — if the settle receipt contains `PayoutEscrowed` / `NftEscrowed`, the
    transfer failed and the recipient must pull-claim (`claim` / `claimNft`). The raffle
    is marked settled and **never retried**; a loud alert includes the escrowed entries.
 
 ### State file (single instance)
 
 `data/keeper-state.json` (atomic tmp+rename writes, debounced, pid-locked) holds the
-settle queue (with attempts/backoff), the log scan cursor, a settled-id ring and the
-per-raffle salt registry. A second process pointed at the same file refuses to start.
-Deleting it is safe: the settle queue rebuilds from the lookback window and status
-checks drop already-completed raffles.
+settle queue (with attempts/backoff), the on-chain sweep cursor + watchlist, the log
+scan cursor, a settled-id ring and the per-raffle salt registry. A second process
+pointed at the same file refuses to start. Deleting it is safe: the settle queue
+rebuilds from the on-chain sweep and the lookback window, and status checks drop
+already-completed raffles.
 
 ---
 
