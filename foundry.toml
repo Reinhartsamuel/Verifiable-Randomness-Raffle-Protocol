@@ -4,7 +4,11 @@ out = "out"
 libs = ["lib"]
 optimizer = true
 optimizer_runs = 1000
-via_ir = false
+# NOTE: via_ir must stay true. With via_ir = false solc 0.8.28 cannot codegen
+# LotteryCore ("Stack too deep" at the settle/_resolve call site), and the repo
+# does not compile at all — forge build / forge test fail at the first
+# `forge build`. Legacy RaffleManager{3..6}/RaffleCore compile either way.
+via_ir = true
 solc_version = "0.8.28+commit.7893614a"
 # NOTE: evm_version intentionally left at the solc default (Cancun) rather than pinned to
 # "paris" — OpenZeppelin Contracts v5.5.0 (Strings/Bytes) unconditionally emits MCOPY, which

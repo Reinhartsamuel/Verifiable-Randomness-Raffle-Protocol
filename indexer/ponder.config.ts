@@ -1,7 +1,7 @@
 import { createConfig } from "ponder";
 import { createTransport, http, type Transport } from "viem";
 
-import { RaffledCoreAbi } from "./abis/RaffledCoreAbi";
+import { RaffleCoreAbi } from "./abis/RaffleCoreAbi";
 
 const RAW_DATABASE_URL = process.env.DATABASE_URL;
 
@@ -95,7 +95,7 @@ export default createConfig({
       // Ponder polls eth_getBlockByNumber every 1s, which is what burns CU
       // even when idle. With ws, idle blocks arrive via subscription for
       // free; eth_getLogs only fires when a block's bloom filter matches
-      // a RaffledCore event (i.e. actual raffle activity).
+      // a RaffleCore event (i.e. actual raffle activity).
       ws: WS_URL,
       // Pin the eth_getLogs chunk size. Without this, Ponder's adaptive
       // range logic collapses the chunk to 1 block on RPC errors, turning
@@ -105,11 +105,11 @@ export default createConfig({
     },
   },
   contracts: {
-    RaffledCore: {
+    RaffleCore: {
       chain: "baseSepolia",
-      abi: RaffledCoreAbi,
+      abi: RaffleCoreAbi,
       address:
-        (process.env.RAFFLED_CORE_ADDRESS as `0x${string}` | undefined) ??
+        (process.env.RAFFLE_CORE_ADDRESS as `0x${string}` | undefined) ??
         "0xc17eee20B4990021bE9cc8eCB7833706465bb8b9",
       startBlock: 45269179,
     },

@@ -13,7 +13,7 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 ///           1. verifyAndClaim is internal (prevents front-running griefing)
 ///           2. verifierOwner removed — single ownership via child's owner()
 ///           3. setTrustedSigner is internal _setTrustedSigner — child exposes with access control
-abstract contract FreeEntryVerifier2 is EIP712("WinrCore", "1") {
+abstract contract FreeEntryVerifier2 is EIP712("LotteryCore", "1") {
     using ECDSA for bytes32;
 
     // ── State ────────────────────────────────────────────────────────────

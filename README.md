@@ -1,15 +1,15 @@
-# Winr Contract
+# LotteryCore Contract
 
 A gas-optimized, decentralized raffle system built with Foundry, OpenZeppelin, and
 [Quiver](https://quiver.dev) verifiable randomness, deployed on **Robinhood Chain**.
 
-> **Core contract: [`src/WinrCore.sol`](src/WinrCore.sol)** — this README documents `WinrCore`.
-> The older `RaffledCore.sol` / `RaffleManager*.sol` contracts (Chainlink VRF + Automation on
-> Base) are legacy and no longer the production flow.
+> **Core contract: [`src/quiver/LotteryCore.sol`](src/quiver/LotteryCore.sol)** — this README documents `LotteryCore`.
+> The older `src/chainlink/RaffleCore.sol` / `src/RaffleManager{3,4,5,6}.sol` contracts (Chainlink
+> VRF + Automation on Base) are legacy and no longer the production flow.
 
 ## Overview
 
-**Winr** lets anyone create and manage trustless raffles on Robinhood Chain. Each raffle escrows
+**LotteryCore** lets anyone create and manage trustless raffles on Robinhood Chain. Each raffle escrows
 an **ERC-20 token** or an **ERC-721 NFT** as the prize and sells tickets for **USDC**. Winners are
 drawn with verifiable on-chain randomness from Quiver, and resolution is driven by a self-operated
 resolver keeper rather than Chainlink Automation.
@@ -40,7 +40,7 @@ resolver keeper rather than Chainlink Automation.
 | Chain ID | `4663` |
 | RPC | `https://rpc.mainnet.chain.robinhood.com` |
 | Explorer | `https://robinhoodchain.blockscout.com` |
-| **WinrCore** | [`0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947`](https://robinhoodchain.blockscout.com/address/0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947) |
+| **LotteryCore** | [`0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947`](https://robinhoodchain.blockscout.com/address/0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947) |
 | **Quiver Coordinator** | `0x8cF4f562301fA966F153eE1e3D46D975DF21C9a3` |
 | **Quiver Provider (active)** | `0xeB8E79d3495638Dde48336D01A1f1229822bB016` |
 | Quiver Provider (fallback) | `0x062Fa60c76f4755836eE45641d1D45fB6f5E88C1` |
@@ -50,7 +50,12 @@ resolver keeper rather than Chainlink Automation.
 | Owner | `0xAcd635171bDcAE7e654e3C4412AfCA04F199D178` |
 | Deploy tx | `0x8cab354dee2f8df8b73b7da500b948b6d4e6769c1c60cb89fb6602243d29c158` |
 
-**Website:** [https://winr.fun](https://winr.fun)
+> ⚠️ The mainnet contract at the address above is a **pre-rebrand deployment**: it is live and
+> holds the deployed state, but its source on Blockscout was verified under the previous contract
+> name, and its EIP-712 free-entry domain is *not* `LotteryCore`/`1`. New deployments built from
+> this tree use the `LotteryCore` domain — signatures are not interchangeable between the two.
+> The `broadcast/` record for this deployment was removed from the repo; the address and deploy tx
+> above are the retained record.
 
 > The constructor takes `(coordinator, provider, fallbackProvider, paymentToken, treasury,
 > trustedSigner, initialOwner)` and is set from the deployment broadcast. Always re-read live
@@ -68,9 +73,9 @@ resolver keeper rather than Chainlink Automation.
 
 ## Architecture
 
-### Contract: `WinrCore.sol`
+### Contract: `LotteryCore.sol`
 
-`WinrCore` inherits from:
+`LotteryCore` inherits from:
 
 - [`QuiverConsumer`](lib/quiver-kit/src/QuiverConsumer.sol) — Quiver push-flow randomness
   (`quiverCallback` → `_fulfillRandomness`).
@@ -310,14 +315,14 @@ event TrustedSignerUpdated(address oldSigner, address newSigner);
 
 ```bash
 git clone <repository-url>
-cd raffled-contract
+cd Verifiable-Randomness-Raffle-Protocol
 forge install
 forge build
 ```
 
 ### Environment Configuration
 
-The `DeployWinrCore.s.sol` script reads these variables (create a `.env`, never commit it):
+The `DeployLotteryCore.s.sol` script reads these variables (create a `.env`, never commit it):
 
 ```env
 DEPLOYER_PRIVATE_KEY=0x...
@@ -336,17 +341,17 @@ RAFFLE_OWNER=0xAcd635171bDcAE7e654e3C4412AfCA04F199D178
 forge test
 forge test --gas-report
 forge test -vvv
-forge test --match-path test/WinrCore.t.sol
+forge test --match-path test/LotteryCore.t.sol
 forge coverage
 ```
 
-The WinrCore suite includes `WinrCore.t.sol`, `WinrCoreFork.t.sol`, `WinrCoreFuzz.t.sol`,
-`WinrCoreRandomness.t.sol`, and `WinrCoreSettlement.t.sol`.
+The LotteryCore suite includes `LotteryCore.t.sol`, `LotteryCoreFork.t.sol`, `LotteryCoreFuzz.t.sol`,
+`LotteryCoreRandomness.t.sol`, and `LotteryCoreSettlement.t.sol`.
 
 ### Deployment
 
 ```bash
-forge script script/DeployWinrCore.s.sol \
+forge script script/DeployLotteryCore.s.sol \
   --rpc-url robinhood_mainnet \
   --broadcast -vvvv
 ```
@@ -362,14 +367,14 @@ After deploy:
 forge verify-contract --watch \
   --rpc-url robinhood_mainnet \
   0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947 \
-  src/WinrCore.sol:WinrCore \
+  src/quiver/LotteryCore.sol:LotteryCore \
   --verifier blockscout \
   --verifier-url "https://robinhoodchain.blockscout.com/api/"
 ```
 
 ## Keeper
 
-Resolution and settlement are driven off-chain by [`winr-keeper`](winr-keeper/README.md), a
+Resolution and settlement are driven off-chain by [`keeper`](keeper/README.md), a
 standalone Node service with two cron jobs:
 
 | Job | Interval | Purpose |
@@ -377,30 +382,36 @@ standalone Node service with two cron jobs:
 | resolve | 2 min | `pendingResolution()` → `resolveRaffle(id, salt)`; sweeps `stalledRaffles()` → `retryResolve` / `cancelStalledRaffle`; auto-tops-up the fee balance. |
 | settle | 45 s | Scans `RandomnessFulfilled` logs and calls permissionless `settle(id)` for every `RESOLVED` raffle. |
 
-See [winr-keeper/README.md](winr-keeper/README.md) for the operator checklist, configuration, and
+See [keeper/README.md](keeper/README.md) for the operator checklist, configuration, and
 error handling.
 
 ## Project Structure
 
 ```
-raffled-contract/
+Verifiable-Randomness-Raffle-Protocol/
 ├── src/
-│   ├── WinrCore.sol             # Production contract
-│   ├── FreeEntryVerifier2.sol   # EIP-712 free-entry verification
-│   └── interfaces/              # Quiver / legacy interfaces
+│   ├── quiver/
+│   │   └── LotteryCore.sol        # Production contract (Quiver VRF, Robinhood Chain)
+│   ├── chainlink/
+│   │   └── RaffleCore.sol         # Legacy Chainlink VRF + Automation contract (Base)
+│   ├── FreeEntryVerifier2.sol     # EIP-712 free-entry verification (used by LotteryCore)
+│   └── RaffleManager{3,4,5,6}.sol # Legacy contracts
 ├── script/
-│   └── DeployWinrCore.s.sol     # Deployment script
+│   └── DeployLotteryCore.s.sol    # Deployment script
 ├── test/
-│   ├── WinrCore*.t.sol          # WinrCore test suite
-│   └── mocks/                   # Test tokens, coordinators, NFTs
-├── winr-keeper/                 # Off-chain resolve + settle keeper
-├── broadcast/                   # Deployment records (chain-id keyed)
-├── lib/                         # Foundry dependencies (OZ v5, forge-std, quiver-kit)
-└── foundry.toml                 # Foundry + RPC config
+│   ├── LotteryCore*.t.sol         # LotteryCore test suite
+│   ├── RaffleCore.t.sol           # RaffleCore test suite
+│   └── mocks/                     # Test tokens, coordinators, NFTs
+├── keeper/                        # Off-chain resolve + settle keeper
+├── indexer/                       # Ponder indexer (RaffleCore, Base Sepolia)
+├── broadcast/                     # Deployment records (chain-id keyed)
+├── lib/                           # Foundry dependencies (OZ v5, forge-std, quiver-kit)
+└── foundry.toml                   # Foundry + RPC config
 ```
 
-Legacy, non-production sources retained for reference: `src/RaffledCore.sol`,
-`src/RaffleManager{3,4,5,6}.sol`, and their tests/scripts (Chainlink on Base).
+`LotteryCore` is the production contract. `RaffleCore`, `RaffleManager{3,4,5,6}` and
+`FreeEntryVerifier` are retained for reference together with their tests, scripts and
+`broadcast/` deployment records.
 
 ## Integration Guide
 
@@ -426,7 +437,7 @@ cast call 0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947 "getRaffle(uint256)" <raffl
 cast call 0x7Df6b990102cAA91EEfC5f9BFDc6dE90C6e7f947 "pendingResolution(uint256,uint256)" 0 50 --rpc-url robinhood_mainnet
 
 # Contract ABI
-forge inspect WinrCore abi > WinrCore.json
+forge inspect LotteryCore abi > LotteryCore.json
 ```
 
 ## License
@@ -439,7 +450,6 @@ MIT License - see [LICENSE](LICENSE) file for details
 - [Quiver integration skill](lib/quiver-kit/plugins/quiver/skills/quiver-integration/SKILL.md)
 - [Robinhood Chain Explorer](https://robinhoodchain.blockscout.com)
 - [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
-- [Winr](https://winr.fun)
 
 ---
 

@@ -1,4 +1,4 @@
-# Ponder 0.17 GraphQL queries for the Raffled frontend.
+# Ponder 0.17 GraphQL queries for the raffle frontend.
 # List queries return paginated connections: { items, pageInfo, totalCount }.
 # BigInt/Hex fields are returned as strings.
 

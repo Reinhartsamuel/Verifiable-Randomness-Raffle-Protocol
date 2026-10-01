@@ -1,8 +1,8 @@
-# Raffled Indexer — RPC Bleed & Architecture Analysis
+# Indexer — RPC Bleed & Architecture Analysis
 
 Date: 2026-08-11
-Scope: `raffled-indexer/` (Ponder v0.17.4, viem 2.35.0), Base Sepolia (chain 84532), single contract `RaffledCore`.
-Note: `.env` / `.env.local` were intentionally **not** read for this analysis, per instructions. Findings below are based on `ponder.config.ts`, `ponder.schema.ts`, `src/RaffledCore.ts`, `.env.example`, `ecosystem.config.cjs`, `.github/workflows/deploy-indexer.yml`, `foundry.toml`, and git history.
+Scope: `indexer/` (Ponder v0.17.4, viem 2.35.0), Base Sepolia (chain 84532), single contract `RaffleCore`.
+Note: `.env` / `.env.local` were intentionally **not** read for this analysis, per instructions. Findings below are based on `ponder.config.ts`, `ponder.schema.ts`, `src/RaffleCore.ts`, `.env.example`, `ecosystem.config.cjs`, `.github/workflows/deploy-indexer.yml`, `foundry.toml`, and git history.
 
 ---
 
@@ -16,15 +16,15 @@ The RPC bleed is **not** caused by a missing rate limiter — a rate limiter *is
 
 ### Root cause A — CI/CD forces a full schema wipe + resync on nearly every push
 
-`.github/workflows/deploy-indexer.yml` runs on every push to `main` that touches `raffled-indexer/**`, and does:
+`.github/workflows/deploy-indexer.yml` runs on every push to `main` that touches `indexer/**`, and does:
 
 ```
-pm2 delete raffled-indexer || true
+pm2 delete indexer || true
 pm2 start ecosystem.config.cjs
 ...
 if grep -q "previously used by a different Ponder app" <log>; then
   DROP SCHEMA IF EXISTS "main" CASCADE
-  pm2 restart raffled-indexer
+  pm2 restart indexer
 fi
 ```
 
@@ -34,12 +34,12 @@ This means: during active "testing" (i.e. iterating on `ponder.config.ts` to fix
 
 ### Root cause B — an extra `eth_call` per `RaffleCreated` event, fired during backfill too
 
-`src/RaffledCore.ts`'s `RaffleCreated` handler calls:
+`src/RaffleCore.ts`'s `RaffleCreated` handler calls:
 
 ```ts
 const data = await context.client.readContract({
-  address: RAFFLED_CORE_ADDRESS,
-  abi: RaffledCoreAbi,
+  address: RAFFLE_CORE_ADDRESS,
+  abi: RaffleCoreAbi,
   functionName: "getRaffle",
   args: [raffleId],
 });
@@ -80,14 +80,14 @@ I did not read `.env`/`.env.local` to confirm which provider(s) are currently wi
 2. **Verify what's actually in `.env`/`.env.local` on the VPS/local machine right now.** The current code only supports and expects a single `PONDER_RPC_URL_84532` (+ optional `PONDER_WS_URL_84532`). If Zan, QuickNode, and Alchemy keys have all been pasted into that single var across different test sessions without letting the previous backfill finish or without resetting the DB schema in between, each one absorbs a resync. Standardize on **one provider, one key**, and don't rotate providers mid-backfill.
 
 ### High
-3. **`getRaffle` extra `readContract` per `RaffleCreated` event** (`src/RaffledCore.ts`) adds an `eth_call` per raffle-creation event during both backfill and realtime. Since it's a workaround for a pre-upgrade event shape missing `ticketPrice`/`maxCap`, consider: (a) if the currently deployed contract can be redeployed with the fixed event (fresh testnet, no real users, no mainnet — this is the easiest window to do it), remove the extra call entirely; or (b) if not, batch these reads via multicall instead of one `readContract` per event.
+3. **`getRaffle` extra `readContract` per `RaffleCreated` event** (`src/RaffleCore.ts`) adds an `eth_call` per raffle-creation event during both backfill and realtime. Since it's a workaround for a pre-upgrade event shape missing `ticketPrice`/`maxCap`, consider: (a) if the currently deployed contract can be redeployed with the fixed event (fresh testnet, no real users, no mainnet — this is the easiest window to do it), remove the extra call entirely; or (b) if not, batch these reads via multicall instead of one `readContract` per event.
 
 4. **The rate limiter is hand-rolled instead of using `@ponder/utils`'s built-in `rateLimit()` helper**, which is already a transitive dependency (`node_modules/@ponder/utils/src/rateLimit.ts`) but isn't imported. The custom version works, but re-implementing throttling by hand (with manual `nextSlot` bookkeeping and a hand-set `retryCount: 0`) is more failure-prone than using the maintained helper, and makes it harder to reason about whether Ponder's own retry/backoff and the custom gate interact correctly under real 429s. Recommend switching to the official helper if it fits the same interface, or at minimum adding tests around the throttle math.
 
 5. **No `maxHistoricalTaskConcurrency` / `maxRealtimeTaskConcurrency` override.** The code comments explicitly diagnose "Ponder's 10-request concurrency bursts past that cap" as the original cause of 429 storms, then work around it entirely inside the custom transport (serializing all requests to 4 req/s) rather than also turning down Ponder's own concurrency setting. Both together would be more robust — right now, 10 concurrent historical tasks all queue up behind the same single 4 req/s gate, which works but means 10x the in-flight requests are parked waiting at once; tune `maxHistoricalTaskConcurrency` down (e.g. 2-4) so the concurrency ceiling and the rate limiter are aligned by design, not just accidentally compatible.
 
 ### Medium
-6. **`ethGetLogsBlockRange: 1000` is a fixed, non-adaptive chunk size.** This was intentionally pinned to stop Ponder's adaptive logic from collapsing to 1-block requests on errors (a real past problem per commit `ee4b7fd`), but a fixed value that's too large can itself trigger provider-side `eth_getLogs` result-size limits (many free tiers cap at ~10k logs or ~2-10MB per response), causing errors → retries → more requests. Worth confirming 1000 blocks never produces oversized responses for `RaffledCore`'s current event volume; if raffle activity increases during testing, consider scaling this down or reintroducing adaptive chunking with a sane floor instead of disabling it outright.
+6. **`ethGetLogsBlockRange: 1000` is a fixed, non-adaptive chunk size.** This was intentionally pinned to stop Ponder's adaptive logic from collapsing to 1-block requests on errors (a real past problem per commit `ee4b7fd`), but a fixed value that's too large can itself trigger provider-side `eth_getLogs` result-size limits (many free tiers cap at ~10k logs or ~2-10MB per response), causing errors → retries → more requests. Worth confirming 1000 blocks never produces oversized responses for `RaffleCore`'s current event volume; if raffle activity increases during testing, consider scaling this down or reintroducing adaptive chunking with a sane floor instead of disabling it outright.
 
 7. **No dedicated "test"/staging deployment.** There are only two run modes: local `ponder dev` (which hot-reloads and can resync aggressively on file changes) and the VPS `ponder start` behind PM2, redeployed via CI on every push. There's no throwaway environment to validate RPC/backfill config changes without touching the "real" (already-provisioned) Postgres DB and provider keys — every config experiment happens directly against production credit-metered infrastructure. Recommend a local `.env.local` + local/ephemeral Postgres (or PGlite for pure dev iteration, even though the config currently hard-refuses PGlite) for tuning cycles, promoting to the VPS only once settled.
 

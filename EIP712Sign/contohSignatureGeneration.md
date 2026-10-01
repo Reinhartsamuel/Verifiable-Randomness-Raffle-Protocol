@@ -5,5 +5,5 @@ SIGNER PRIVATE KEY: 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7c
 User address yang mau di-whitelist: 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 Signature: 0x82f1a97b713f459c062f015675ad9366b586483f0109fb66445d92462af4c76545e8fe509d308a4ecedaad64a9ea3fe2450decda3f0ea8663451c3e96f24fbc31c
 Raffle Id: 1
-Verifier contract (contract address WinrCore) : 0xaF5d21301B0454538836FcdC857eeFd7A0A96733 (base sepolia)
+Verifier contract (contract address LotteryCore) : 0xaF5d21301B0454538836FcdC857eeFd7A0A96733 (base sepolia)
 Chain ID: 84532 (base sepolia)

@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @notice ERC-20 that refuses to transfer to a blacklisted recipient. Used to force the
-///         escrow fallback path in WinrCore payouts (winner/host/treasury blacklisted).
+///         escrow fallback path in LotteryCore payouts (winner/host/treasury blacklisted).
 contract BlacklistERC20 is ERC20 {
     mapping(address => bool) public blacklisted;
 

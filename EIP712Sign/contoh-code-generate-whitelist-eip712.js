@@ -3,7 +3,7 @@
 import { getAddress, Wallet, ethers } from "npm:ethers@6";
 
 const EIP712_DOMAIN = {
-  name: "WinrCore",
+  name: "LotteryCore",
   version: "1",
   chainId: 84532,
   verifyingContract: "0x0000000000000000000000000000000000000000",

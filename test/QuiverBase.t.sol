@@ -2,19 +2,19 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {WinrCore} from "../src/WinrCore.sol";
+import {LotteryCore} from "../src/quiver/LotteryCore.sol";
 import {MockQuiverCoordinator} from "./mocks/MockQuiverCoordinator.sol";
 import {StandardERC20} from "./mocks/StandardERC20.sol";
 import {MockERC721} from "./mocks/MockERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-/// @notice Shared scaffolding for the WinrCore suites. Deploys the mock coordinator,
+/// @notice Shared scaffolding for the LotteryCore suites. Deploys the mock coordinator,
 ///         registers an active + a fallback provider (both fee 0, known seeds), deploys the
 ///         contract as owner = this test, sets a 250 bps platform fee via the 2-day timelock,
 ///         whitelists RESOLVER, and funds the users.
 abstract contract QuiverBaseTest is Test {
-    WinrCore mgr;
+    LotteryCore mgr;
     MockQuiverCoordinator coord;
     StandardERC20 prizeToken;
     StandardERC20 usdc;
@@ -69,7 +69,7 @@ abstract contract QuiverBaseTest is Test {
         nft = new MockERC721();
         nft2 = new MockERC721();
 
-        mgr = new WinrCore({
+        mgr = new LotteryCore({
             _quiver: address(coord),
             _provider: providerA,
             _fallbackProvider: providerB,
@@ -203,7 +203,7 @@ abstract contract QuiverBaseTest is Test {
                 keccak256(
                     abi.encode(
                         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                        keccak256(bytes("WinrCore")),
+                        keccak256(bytes("LotteryCore")),
                         keccak256(bytes("1")),
                         block.chainid,
                         address(mgr)

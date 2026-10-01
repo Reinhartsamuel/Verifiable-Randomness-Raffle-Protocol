@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @notice ERC-20 whose behaviour on outbound `transfer` is configurable, to prove
-///         WinrCore's settlement cannot be bricked by a hostile prize token:
+///         LotteryCore's settlement cannot be bricked by a hostile prize token:
 ///         - `Revert`: transfer() reverts
 ///         - `ReturnFalse`: transfer() returns false
 ///         - `ReturndataBomb`: transfer() returns 64 KiB of garbage (returndata-bomb probe)

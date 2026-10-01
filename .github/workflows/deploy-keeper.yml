@@ -1,10 +1,10 @@
-name: Deploy Winr Keeper to VPS
+name: Deploy Keeper to VPS
 
 on:
   push:
     branches: [main]
     paths:
-      - "winr-keeper/**"
+      - "keeper/**"
       - ".github/workflows/deploy-keeper.yml"
   workflow_dispatch:
 
@@ -24,7 +24,7 @@ jobs:
             set -e
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            cd /home/admin/repos/RAFFLED-CONTRACTS/winr-keeper
+            cd /home/admin/repos/Verifiable-Randomness-Raffle-Protocol/keeper
             git fetch origin main
             git reset --hard origin/main
             if [ ! -f .env.local ]; then
@@ -33,22 +33,22 @@ jobs:
             fi
             npm ci
             npm run build
-            pm2 delete winr-keeper || true
-            pm2 delete raffled-keeper || true # one-time cleanup of the pre-rename process
-            pm2 flush winr-keeper || pm2 flush || true
+            pm2 delete keeper || true
+            pm2 delete keeper || true # one-time cleanup of the pre-rename process
+            pm2 flush keeper || pm2 flush || true
             pm2 start ecosystem.config.cjs
             pm2 save
             echo "pm2 saved"
             echo "Waiting for keeper startup..."
             for i in $(seq 1 30); do
-              # pm2 suffixes log files with the process id (winr-keeper-out-5.log),
+              # pm2 suffixes log files with the process id (keeper-out-5.log),
               # so resolve the newest matching files instead of assuming a name.
-              OUT_LOG="$(ls -t "$HOME"/.pm2/logs/winr-keeper-out*.log 2>/dev/null | head -n 1)"
-              ERR_LOG="$(ls -t "$HOME"/.pm2/logs/winr-keeper-error*.log 2>/dev/null | head -n 1)"
+              OUT_LOG="$(ls -t "$HOME"/.pm2/logs/keeper-out*.log 2>/dev/null | head -n 1)"
+              ERR_LOG="$(ls -t "$HOME"/.pm2/logs/keeper-error*.log 2>/dev/null | head -n 1)"
               LOGS=""
               if [ -n "$OUT_LOG" ]; then LOGS="$OUT_LOG"; fi
               if [ -n "$ERR_LOG" ]; then LOGS="$LOGS $ERR_LOG"; fi
-              if [ -n "$OUT_LOG" ] && grep -q "winr-keeper started" "$OUT_LOG" 2>/dev/null; then
+              if [ -n "$OUT_LOG" ] && grep -q "keeper started" "$OUT_LOG" 2>/dev/null; then
                 echo "Keeper is up."
                 break
               fi
@@ -60,12 +60,12 @@ jobs:
               fi
               if [ "$i" -eq 30 ]; then
                 echo "Keeper did not report startup within 60s. Recent logs:"
-                pm2 logs winr-keeper --lines 50 --nostream
+                pm2 logs keeper --lines 50 --nostream
                 exit 1
               fi
               sleep 2
             done
             echo "Keeper process status:"
-            pm2 describe winr-keeper | grep -E "status|uptime|restarts" || true
+            pm2 describe keeper | grep -E "status|uptime|restarts" || true
             echo "Recent keeper logs:"
-            pm2 logs winr-keeper --lines 20 --nostream 
+            pm2 logs keeper --lines 20 --nostream 

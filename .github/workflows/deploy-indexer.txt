@@ -24,12 +24,12 @@ jobs:
             set -e
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            cd /home/admin/repos/RAFFLED-CONTRACTS/indexer
+            cd /home/admin/repos/Verifiable-Randomness-Raffle-Protocol/indexer
             git fetch origin main
             git reset --hard origin/main
             npm ci
             npm run codegen
-            pm2 delete raffled-indexer || true
+            pm2 delete indexer || true
             pm2 start ecosystem.config.cjs
             pm2 save
             echo "pm2 saved"
@@ -40,7 +40,7 @@ jobs:
                 break
               fi
               if [ "$i" -eq 60 ]; then
-                LATEST_LOG=$(ls -t ~/.pm2/logs/raffled-indexer-out*.log 2>/dev/null | head -1)
+                LATEST_LOG=$(ls -t ~/.pm2/logs/indexer-out*.log 2>/dev/null | head -1)
                 if [ -n "$LATEST_LOG" ] && grep -q "previously used by a different Ponder app" "$LATEST_LOG" 2>/dev/null; then
                   echo "Schema app-id mismatch (config identity changed). Dropping stale schema and retrying..."
                   node -e "
@@ -57,18 +57,18 @@ jobs:
                       console.log('dropped schema main');
                     })().catch((e) => { console.error('schema drop failed:', e.message); process.exit(1); });
                   "
-                  pm2 restart raffled-indexer
+                  pm2 restart indexer
                   sleep 10
                   if curl -fsS http://localhost:42069/health > /dev/null 2>&1; then
                     echo "Ponder is up after schema reset."
                     break
                   fi
                   echo "Still unhealthy after schema reset. Recent logs:"
-                  pm2 logs raffled-indexer --lines 50 --nostream
+                  pm2 logs indexer --lines 50 --nostream
                   exit 1
                 fi
                 echo "Ponder did not become healthy after 60s. Recent logs:"
-                pm2 logs raffled-indexer --lines 50 --nostream
+                pm2 logs indexer --lines 50 --nostream
                 exit 1
               fi
               sleep 2

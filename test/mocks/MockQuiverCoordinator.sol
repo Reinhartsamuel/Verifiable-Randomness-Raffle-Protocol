@@ -44,7 +44,7 @@ library MockQuiverHash {
 /// @notice A faithful-enough, test-owned stand-in for the live QuiverCoordinator on Robinhood
 ///         Chain (which has no public source / cannot be forked locally for unit tests).
 ///
-/// @dev    Implements the semantics WinrCore relies on:
+/// @dev    Implements the semantics LotteryCore relies on:
 ///         - per-provider monotonic 1-based sequence numbers (getProviderSequenceNumber),
 ///         - fee quotes via getFee(provider) = providerFee + protocolFee,
 ///         - requestWithCallback (push) recording the user's commitment,
@@ -465,7 +465,7 @@ contract MockQuiverCoordinator {
         ++p.sequenceNumber;
         p.accruedFeesInWei += p.feeInWei;
         accruedProtocolFees += protocolFee;
-        // return excess value to the caller (WinrCore pays the exact quote, so none)
+        // return excess value to the caller (LotteryCore pays the exact quote, so none)
         uint256 refund = msg.value - totalFee;
         if (refund > 0) {
             (bool ok,) = msg.sender.call{value: refund}("");

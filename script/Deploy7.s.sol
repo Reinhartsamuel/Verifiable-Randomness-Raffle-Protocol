@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
-import {RaffledCore} from "../src/RaffledCore.sol";
+import {RaffleCore} from "../src/chainlink/RaffleCore.sol";
 
-/// @notice Deployment script for RaffledCore.
+/// @notice Deployment script for RaffleCore.
 ///
 /// PREREQUISITES (must be set in .env):
 ///   DEPLOYER_PRIVATE_KEY  – deployer wallet private key
@@ -36,7 +36,7 @@ import {RaffledCore} from "../src/RaffledCore.sol";
 ///
 
 contract Deploy7 is Script {
-    function run() external returns (RaffledCore raffle) {
+    function run() external returns (RaffleCore raffle) {
         // ── Load configuration ──────────────────────────────────────────────
         uint256 deployerKey = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(0));
 
@@ -73,7 +73,7 @@ contract Deploy7 is Script {
             vm.startBroadcast(deployerKey);
         }
 
-        raffle = new RaffledCore(vrfCoordinator, keyHash, subId, paymentToken, treasury, trustedSigner);
+        raffle = new RaffleCore(vrfCoordinator, keyHash, subId, paymentToken, treasury, trustedSigner);
 
         if (initialFeeBps > 0) {
             raffle.proposeFeeChange(initialFeeBps);
@@ -89,7 +89,7 @@ contract Deploy7 is Script {
 
         // ── Output ──────────────────────────────────────────────────────────
         console.log("===========================================");
-        console.log("RaffledCore deployed to:");
+        console.log("RaffleCore deployed to:");
         console.logAddress(address(raffle));
         console.log("");
         console.log("Configuration:");
@@ -104,10 +104,10 @@ contract Deploy7 is Script {
         console.log("  Min Duration  : 2 hours");
         console.log("");
         console.log("Next steps:");
-        console.log("1. Add RaffledCore as VRF consumer on vrf.chain.link");
+        console.log("1. Add RaffleCore as VRF consumer on vrf.chain.link");
         console.log("2. Fund VRF subscription with LINK");
         console.log("3. If INITIAL_FEE_BPS > 0, call applyFeeChange() after 2 days");
-        console.log("4. Verify: forge verify-contract <address> src/RaffledCore.sol:RaffledCore --chain <8453|84532>");
+        console.log("4. Verify: forge verify-contract <address> src/chainlink/RaffleCore.sol:RaffleCore --chain <8453|84532>");
         console.log("===========================================");
 
         return raffle;

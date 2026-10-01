@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract WinrUSDG {
-    string public name = "Winr USDG";
+contract MockUSDG {
+    string public name = "Mock USDG";
     string public symbol = "USDG";
     uint8 public decimals = 6;
     uint256 public totalSupply;

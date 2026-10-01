@@ -3,12 +3,12 @@ pragma solidity ^0.8.24;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {WinrCore} from "../src/WinrCore.sol";
+import {LotteryCore} from "../src/quiver/LotteryCore.sol";
 import {StandardERC20} from "../test/mocks/StandardERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title  E2EQuiverTestnet
-/// @notice Step-by-step end-to-end walkthrough of WinrCore against the LIVE Quiver
+/// @notice Step-by-step end-to-end walkthrough of LotteryCore against the LIVE Quiver
 ///         coordinator on Robinhood testnet. Run with `--rpc-url robinhood_testnet`.
 ///
 ///         Env (all except the buyer/owner/salt defaults are required):
@@ -24,7 +24,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///         - RAFFLE_SALT           (step 3) hex salt used for resolution
 ///
 ///         Steps:
-///           1. `run()`      deploys a test ERC-20 + WinrCore, creates a raffle, buys
+///           1. `run()`      deploys a test ERC-20 + LotteryCore, creates a raffle, buys
 ///                           tickets, prints the manager + raffle id.
 ///           2. wait for `expiry` to pass, then `stepResolve()` requests randomness from the
 ///              live coordinator (keep the salt secret until the tx lands).
@@ -46,7 +46,7 @@ contract E2EQuiverTestnet is Script {
 
         vm.startBroadcast(operatorKey);
         StandardERC20 demoToken = new StandardERC20("E2E Token", "E2E", 1_000_000e18);
-        WinrCore mgr = new WinrCore(coordinator, provider, address(0), address(demoToken), treasury, signer, owner);
+        LotteryCore mgr = new LotteryCore(coordinator, provider, address(0), address(demoToken), treasury, signer, owner);
         mgr.setResolver(operator, true);
 
         // Host (operator) creates an ERC-20 raffle with the demo token.
@@ -63,7 +63,7 @@ contract E2EQuiverTestnet is Script {
         mgr.enterRaffle(raffleId, 5);
         vm.stopBroadcast();
 
-        console2.log("WinrCore testnet E2E - step 1 complete");
+        console2.log("LotteryCore testnet E2E - step 1 complete");
         console2.log("Manager:  %s", address(mgr));
         console2.log("Raffle:   %s", raffleId);
         console2.log("Expiry:   %s", uint256(mgr.getRaffle(raffleId).expiry));
@@ -77,7 +77,7 @@ contract E2EQuiverTestnet is Script {
 
     function stepResolve() external {
         uint256 operatorKey = vm.envUint("PRIVATE_KEY");
-        WinrCore mgr = WinrCore(payable(vm.envAddress("RAFFLE_MANAGER")));
+        LotteryCore mgr = LotteryCore(payable(vm.envAddress("RAFFLE_MANAGER")));
         uint256 raffleId = vm.envUint("RAFFLE_ID");
         bytes32 salt = vm.envBytes32("RAFFLE_SALT");
 
@@ -93,7 +93,7 @@ contract E2EQuiverTestnet is Script {
     }
 
     function stepSettle() external {
-        WinrCore mgr = WinrCore(payable(vm.envAddress("RAFFLE_MANAGER")));
+        LotteryCore mgr = LotteryCore(payable(vm.envAddress("RAFFLE_MANAGER")));
         uint256 raffleId = vm.envUint("RAFFLE_ID");
         uint256 status = uint256(mgr.getRaffle(raffleId).status);
         require(status == 4, "raffle not RESOLVED yet (keeper has not revealed)");

@@ -3,7 +3,7 @@
 import { getAddress, Wallet } from "npm:ethers@6";
 
 const EIP712_DOMAIN = {
-  name: "WinrCore",
+  name: "LotteryCore",
   version: "1",
   chainId: 84532,
   verifyingContract: "0xaF5d21301B0454538836FcdC857eeFd7A0A96733",
@@ -26,7 +26,7 @@ function usage() {
     "  signer-private-key Private key of the backend signer",
     "  raffleId           Target raffle",
     "  chainId            (optional) Defaults to 84532 (Base Sepolia)",
-    "  verifyingContract  (optional) WinrCore address, defaults to Base Sepolia deployment",
+    "  verifyingContract  (optional) LotteryCore address, defaults to Base Sepolia deployment",
     "",
     "Output:",
     "  bulk-entries-<raffleId>.json  — {address, raffleId, signature} per entry + claim links",
