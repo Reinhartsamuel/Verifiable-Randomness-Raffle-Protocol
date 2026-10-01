@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "raffled-indexer/**"
+      - "indexer/**"
       - ".github/workflows/deploy-indexer.yml"
   workflow_dispatch:
 
@@ -24,7 +24,7 @@ jobs:
             set -e
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            cd /home/admin/repos/RAFFLED-CONTRACTS/raffled-indexer
+            cd /home/admin/repos/RAFFLED-CONTRACTS/indexer
             git fetch origin main
             git reset --hard origin/main
             npm ci

@@ -20,3 +20,4 @@ winr-pivot.json
 .claude/*
 hermes-upload.sh
 hermes-download.sh
+hermes-results/
