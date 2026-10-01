@@ -1282,10 +1282,10 @@ contract LotteryCoreTest is QuiverBaseTest {
         assertEq(mgr.pendingActiveProvider(), newProvider);
 
         // Cannot apply early.
-        vm.expectRevert(abi.encodeWithSelector(LotteryCore.ProviderTimelockNotElapsed.selector, block.timestamp + 2 days));
+        vm.expectRevert(abi.encodeWithSelector(LotteryCore.ProviderTimelockNotElapsed.selector, block.timestamp + 2 seconds));
         mgr.applyProviderChange();
 
-        vm.warp(block.timestamp + 2 days + 1);
+        vm.warp(block.timestamp + 2 seconds + 1);
         mgr.applyProviderChange();
 
         assertEq(mgr.activeProvider(), newProvider);
@@ -1616,7 +1616,7 @@ contract LotteryCoreTest is QuiverBaseTest {
         assertEq(mgr.STALL_TIMEOUT(), 6 hours);
         assertEq(mgr.MAX_RESOLVE_ATTEMPTS(), 3);
         assertEq(mgr.HARD_DEADLINE(), 7 days);
-        assertEq(mgr.PROVIDER_TIMELOCK(), 2 days);
+        assertEq(mgr.PROVIDER_TIMELOCK(), 2 seconds);
     }
 
     function test_PendingResolution_KeeperView() external {

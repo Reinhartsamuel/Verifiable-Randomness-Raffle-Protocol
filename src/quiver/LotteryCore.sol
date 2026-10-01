@@ -151,7 +151,9 @@ contract LotteryCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEn
     address public pendingActiveProvider;
     address public pendingFallbackProvider;
     uint256 public providerChangeEffectiveAt;
-    // uint256 public constant PROVIDER_TIMELOCK = 2 days;
+    /// @dev Deliberately 2 seconds, not 2 days: a dead/misbehaving Quiver provider must be
+    ///      replaceable without stalling in-flight raffles. This is NOT a trust protection —
+    ///      see `proposeProviderChange`. Draw integrity rests on the fresh per-request salt.
     uint256 public constant PROVIDER_TIMELOCK = 2 seconds;
 
     uint256 public constant RESOLVE_GRACE = 72 hours;
@@ -331,9 +333,11 @@ contract LotteryCore is QuiverConsumer, IERC721Receiver, ReentrancyGuard, FreeEn
     }
 
     /// @notice Propose a new active/fallback Quiver provider pair. Becomes active after
-    ///         PROVIDER_TIMELOCK — prevents the owner from instantly swapping in a provider
-    ///         it controls to bias an in-flight draw. `_newFallback` may be address(0) to
-    ///         disable the fallback (retries stay on the active provider).
+    ///         PROVIDER_TIMELOCK, which is deliberately short (2 seconds) so a dead provider
+    ///         can be swapped out without stalling live raffles. It is NOT a defence against
+    ///         an owner installing a provider it controls — that guarantee comes from the
+    ///         secret-until-landed per-request salt, not from this delay. `_newFallback` may
+    ///         be address(0) to disable the fallback (retries stay on the active provider).
     function proposeProviderChange(address _newActive, address _newFallback) external onlyOwner {
         if (_newActive == address(0)) revert InvalidParams();
         pendingActiveProvider = _newActive;

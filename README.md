@@ -60,7 +60,8 @@ resolver keeper rather than Chainlink Automation.
 > The constructor takes `(coordinator, provider, fallbackProvider, paymentToken, treasury,
 > trustedSigner, initialOwner)` and is set from the deployment broadcast. Always re-read live
 > values (`activeProvider()`, `fallbackProvider()`, `getCoordinator()`, `randomnessFee()`) before
-> relying on them, as provider changes are timelocked but applyable.
+> relying on them. Note that the provider-change timelock is only 2 seconds (a dead provider must be
+> replaceable without stalling live raffles), so it is not a protection against a malicious owner.
 
 ### Robinhood Chain — Testnet
 
@@ -222,7 +223,7 @@ function setTrustedSigner(address _newSigner) external onlyOwner;
 function setMinDuration(uint256 _newMinDuration) external onlyOwner; // floor 2 hours
 function proposeFeeChange(uint256 _newFeeBps) external onlyOwner;    // ≤ 1000 bps, 2-day timelock
 function applyFeeChange() external onlyOwner;
-function proposeProviderChange(address _newActive, address _newFallback) external onlyOwner;
+function proposeProviderChange(address _newActive, address _newFallback) external onlyOwner; // 2-second timelock
 function applyProviderChange() external onlyOwner;
 function setResolver(address _resolver, bool _allowed) external onlyOwner;
 function fundRandomnessFees() external payable;  // fund the Quiver request balance
@@ -302,7 +303,8 @@ event TrustedSignerUpdated(address oldSigner, address newSigner);
   per-raffle salt replay guard, and a `(provider, sequenceNumber)` request index that prevents
   cross-provider sequence collisions.
 - **Access control.** Resolver allowlist (`isResolver`), `Ownable2Step`, 2-day fee timelock,
-  timelocked provider rotation, and pausing that never blocks resolution/settlement/refunds.
+  a 2-second provider-change timelock (anti-stall, not a trust boundary), and pausing that never blocks
+  resolution/settlement/refunds.
 
 ## Development Setup
 
